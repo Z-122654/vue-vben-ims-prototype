@@ -1,0 +1,4 @@
+interface:
+  display_name: "IMS 原型设计"
+  short_description: "按照已确认的 IMS 习惯设计列表、弹窗明细、分区表单和子表"
+  default_prompt: "使用 $ims-prototype-design，结合当前应用组件和需求设计或调整 IMS 原型页面。"
