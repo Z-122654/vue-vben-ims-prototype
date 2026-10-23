@@ -32,6 +32,8 @@
 
 现有 `ims-form-grid` 配合 `span-two`、`wide` 处理字段跨度。继承样式时核对外层类名和响应式规则；不要仅复制类名后另写一套近似样式。
 
+按钮禁用样式也位于 `ims.css`：查找 `.ant-btn:is(:disabled, .ant-btn-disabled)` 及主按钮的 `:not(:disabled)` 规则。`components/ScoringTable.vue` 的“删除指标”可用于核对启用/禁用切换。灰底与文字色取自正式 IMS 的 `src/components/ImsComponent/css/until.less`。新模块应在自己的样式作用域复用该规则；不要依赖 `.competition-page` 类名，也不要复制竞赛业务的禁用条件。
+
 同一模块优先复用组件。跨 app 复用先检查是否已有共享能力；确有通用需求再提取去除业务依赖的组件，不把 `EntryInformation`、评分规则或竞赛状态直接作为全仓库框架。不要为了单次设计调整无关 app 或共享包。
 
 ## 正式 IMS 的可行性调研
