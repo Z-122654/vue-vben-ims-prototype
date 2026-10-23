@@ -55,12 +55,13 @@ vite.config.ts.*
 # AI
 .agent
 .agents
-# Track the project design skill while keeping other agent files local.
+# Track the project design and requirements skills while keeping other agent files local.
 !/.agents/
 /.agents/*
 !/.agents/skills/
 /.agents/skills/*
 !/.agents/skills/ims-prototype-design/
+!/.agents/skills/ims-requirements-doc/
 .claude
 .codex
 skills-lock.json

@@ -7,6 +7,8 @@ description: Design, implement, or review IMS business CRUD prototypes in vue-vb
 
 在本仓库中制作便于映射到正式 IMS 系统的业务原型。以下默认值来自用户确认的页面调整，并以 `web-innovation` 当前实现为参考；用户的新要求优先。
 
+编写或维护详细业务需求文档由 [ims-requirements-doc](../ims-requirements-doc/SKILL.md) 负责；本技能聚焦页面布局、组件表现和交互设计，不要求两个技能强制串行调用。
+
 ## 工作方式
 
 1. 阅读仓库及目标 app 的 `AGENTS.md`、`CONTEXT.md`，确认本次是方案、调研还是实现。用户只要求讨论时输出方案，不修改业务代码。

@@ -1,0 +1,4 @@
+interface:
+  display_name: "IMS 详细需求文档"
+  short_description: "结合已确认讨论与现有原型，编写和维护 IMS 模块总需求及页面明细"
+  default_prompt: "使用 $ims-requirements-doc，结合已确认需求和现有原型整理模块总需求与页面明细，集中列出差异及待确认事项。"
