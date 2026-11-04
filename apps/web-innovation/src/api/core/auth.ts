@@ -1,3 +1,8 @@
+import { useAccessStore } from '@vben/stores';
+
+import { message } from 'ant-design-vue';
+
+import { getDemoSession, isStaticDemo, loginDemo } from '#/api/demo-auth';
 import { baseRequestClient, requestClient } from '#/api/request';
 
 export namespace AuthApi {
@@ -22,6 +27,14 @@ export namespace AuthApi {
  * 登录
  */
 export async function loginApi(data: AuthApi.LoginParams) {
+  if (isStaticDemo) {
+    try {
+      return loginDemo(data);
+    } catch (error) {
+      message.error((error as Error).message);
+      throw error;
+    }
+  }
   return requestClient.post<AuthApi.LoginResult>('/auth/login', data);
 }
 
@@ -29,6 +42,12 @@ export async function loginApi(data: AuthApi.LoginParams) {
  * 刷新accessToken
  */
 export async function refreshTokenApi() {
+  if (isStaticDemo) {
+    return {
+      data: getDemoSession(useAccessStore().accessToken).user.token,
+      status: 200,
+    };
+  }
   return baseRequestClient.post<AuthApi.RefreshTokenResult>(
     '/auth/refresh',
     undefined,
@@ -42,6 +61,7 @@ export async function refreshTokenApi() {
  * 退出登录
  */
 export async function logoutApi() {
+  if (isStaticDemo) return;
   return baseRequestClient.post('/auth/logout', undefined, {
     withCredentials: true,
   });
@@ -51,5 +71,6 @@ export async function logoutApi() {
  * 获取用户权限码
  */
 export async function getAccessCodesApi() {
+  if (isStaticDemo) return getDemoSession(useAccessStore().accessToken).codes;
   return requestClient.get<string[]>('/auth/codes');
 }

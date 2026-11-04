@@ -9,6 +9,7 @@ import { preferences } from '@vben/preferences';
 import { message } from 'ant-design-vue';
 
 import { getAllMenusApi } from '#/api';
+import { isStaticDemo } from '#/api/demo-auth';
 import { BasicLayout, IFrameView } from '#/layouts';
 import { $t } from '#/locales';
 
@@ -22,21 +23,24 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
     IFrameView,
   };
 
-  return await generateAccessible(preferences.app.accessMode, {
-    ...options,
-    fetchMenuListAsync: async () => {
-      message.loading({
-        content: `${$t('common.loadingMenu')}...`,
-        duration: 1.5,
-      });
-      return await getAllMenusApi();
+  return await generateAccessible(
+    isStaticDemo ? 'frontend' : preferences.app.accessMode,
+    {
+      ...options,
+      fetchMenuListAsync: async () => {
+        message.loading({
+          content: `${$t('common.loadingMenu')}...`,
+          duration: 1.5,
+        });
+        return await getAllMenusApi();
+      },
+      // 可以指定没有权限跳转403页面
+      forbiddenComponent,
+      // 如果 route.meta.menuVisibleWithForbidden = true
+      layoutMap,
+      pageMap,
     },
-    // 可以指定没有权限跳转403页面
-    forbiddenComponent,
-    // 如果 route.meta.menuVisibleWithForbidden = true
-    layoutMap,
-    pageMap,
-  });
+  );
 }
 
 export { generateAccess };

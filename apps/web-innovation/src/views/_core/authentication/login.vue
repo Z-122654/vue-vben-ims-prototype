@@ -7,6 +7,7 @@ import { computed } from 'vue';
 import { AuthenticationLogin, z } from '@vben/common-ui';
 import { $t } from '@vben/locales';
 
+import { isStaticDemo } from '#/api/demo-auth';
 import { useAuthStore } from '#/store';
 
 defineOptions({ name: 'Login' });
@@ -84,6 +85,16 @@ const formSchema = computed((): VbenFormSchema[] => {
 
 <template>
   <AuthenticationLogin
+    :show-code-login="!isStaticDemo"
+    :show-forget-password="!isStaticDemo"
+    :show-qrcode-login="!isStaticDemo"
+    :show-register="!isStaticDemo"
+    :show-third-party-login="!isStaticDemo"
+    :sub-title="
+      isStaticDemo
+        ? '请选择演示账号，密码 123456；数据仅保存在当前浏览器。'
+        : undefined
+    "
     :form-schema="formSchema"
     :loading="authStore.loginLoading"
     @submit="authStore.authLogin"
