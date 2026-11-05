@@ -41,6 +41,9 @@ import Section from './Section.vue';
 import { useExchange } from './store';
 import { ask, perform } from './ui';
 import { useValidation } from './validation';
+// 临时隐藏交流明细的整理入口，保留原功能以便恢复。
+const showKnowledgeImportEntry = false;
+
 const props = defineProps<{ initial: Topic }>();
 const emit = defineEmits<{ close: [] }>();
 const knowledgeBusy = ref(false);
@@ -278,7 +281,7 @@ function referenceName(r: Reply) {
   >
     <div class="detail-toolbar">
       <SourceLaunch
-        v-if="current?.status === '已发布'"
+        v-if="showKnowledgeImportEntry && current?.status === '已发布'"
         module="exchange"
         :parent-id="current.id"
         :source-actor-id="actor.id"

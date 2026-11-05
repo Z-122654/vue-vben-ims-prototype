@@ -1,3 +1,4 @@
+import { approveForTest } from './publication-test-support';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -246,7 +247,7 @@ describe('各角色完整业务链路', () => {
       '结果说明',
       '',
     );
-    changeActivity(data, manager, a.id, '已公示');
+    approveForTest(data, manager, a.id);
     const winner = currentPublication(activity)!.winners[0]!;
     for (const actor of people) {
       expect(canDownloadCertificate(activity, winner, actor)).toBe(

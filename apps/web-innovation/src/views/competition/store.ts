@@ -8,6 +8,7 @@ import {
   withActivityPublishers,
   withHiddenShowcaseExample,
 } from './seed';
+import { withApprovalExamples } from './approval-examples';
 import { withWorkflowExamples } from './workflow-examples';
 
 const key = 'vben-web-innovation:competition:v1';
@@ -30,7 +31,10 @@ function load(): CompetitionData {
           initial,
         );
         const enriched = withActivityPublishers(
-          withWorkflowExamples(normalized, initial),
+          withApprovalExamples(
+            withWorkflowExamples(normalized, initial),
+            initial,
+          ),
           initial,
         );
         if (JSON.stringify(enriched) !== raw) {
@@ -76,7 +80,14 @@ function switchActor(id: string) {
   }
 }
 function commit(action: (draft: CompetitionData) => void) {
-  const draft = copy(data.value);
+  let base = data.value;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) base = normalizeCompetitionData(JSON.parse(raw));
+  } catch {
+    throw new Error('无法读取最新演示数据，请刷新后重试。本次更改未保存。');
+  }
+  const draft = copy(base);
   action(draft);
   try {
     localStorage.setItem(key, JSON.stringify(draft));
@@ -86,6 +97,14 @@ function commit(action: (draft: CompetitionData) => void) {
     );
   }
   data.value = draft;
+}
+function refresh() {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) data.value = normalizeCompetitionData(JSON.parse(raw));
+  } catch {
+    throw new Error('无法读取最新演示数据，请重试。');
+  }
 }
 function reset() {
   const fresh = seedData();
@@ -98,5 +117,14 @@ function reset() {
   storageWarning.value = '';
 }
 export function useCompetition() {
-  return { data, actor, actorId, switchActor, commit, reset, storageWarning };
+  return {
+    data,
+    actor,
+    actorId,
+    switchActor,
+    commit,
+    refresh,
+    reset,
+    storageWarning,
+  };
 }

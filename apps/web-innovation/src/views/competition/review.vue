@@ -13,6 +13,7 @@ import ScoringTable from './components/ScoringTable.vue';
 import { useDetailDialog } from './detail-dialog';
 import {
   canManageActivity,
+  canReadPublicationApproval,
   copy,
   person,
   reviewOverdue,
@@ -37,7 +38,8 @@ const allowed = computed(
     review.value &&
     (review.value.expertId === actor.value.id ||
       (activity.value &&
-        canManageActivity(activity.value, actor.value) &&
+        (canManageActivity(activity.value, actor.value) ||
+          canReadPublicationApproval(activity.value, actor.value)) &&
         review.value.status === '已提交')),
 );
 const editable = computed(

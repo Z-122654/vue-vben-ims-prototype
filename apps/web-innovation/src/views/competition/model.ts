@@ -45,6 +45,32 @@ export interface Criterion {
   name: string;
   max: number;
 }
+export interface PublicationApproval {
+  id: string;
+  status: '审批中' | '已通过' | '已驳回' | '已撤回';
+  kind: '初次公示' | '结果更正';
+  submittedBy: string;
+  submittedName: string;
+  submittedAt: string;
+  endedAt: string;
+  withdrawnBy?: string;
+  decisions: {
+    personId: string;
+    name: string;
+    department: string;
+    status: '待审批' | '同意' | '驳回';
+    opinion: string;
+    at: string;
+  }[];
+  snapshot: {
+    title: string;
+    body: string;
+    awards: AwardInput[];
+    entryIds: string[];
+    publication: Publication;
+    baseVersion: number;
+  };
+}
 export interface Activity {
   id: string;
   code: string;
@@ -78,6 +104,8 @@ export interface Activity {
   noticeBody: string;
   noticeDate: string;
   publishedAt: string;
+  publicApproverIds?: string[];
+  publicationApprovals?: PublicationApproval[];
   publications?: Publication[];
   resultCorrection?: ResultCorrection;
 }
@@ -775,6 +803,8 @@ export function canSeeEntry(
   return (
     !!activity &&
     (canManageActivity(activity, actor) ||
+      (entry.status === '审核通过' &&
+        canReadPublicationApproval(activity, actor)) ||
       actor.id === entry.ownerId ||
       data.reviews.some(
         (r) => r.entryId === entry.id && r.expertId === actor.id,
@@ -796,7 +826,10 @@ export function isInternalReader(
   return (
     data.activities.some(
       (activity) =>
-        activity.id === entry.activityId && canManageActivity(activity, actor),
+        activity.id === entry.activityId &&
+        (canManageActivity(activity, actor) ||
+          (entry.status === '审核通过' &&
+            canReadPublicationApproval(activity, actor))),
     ) ||
     entry.ownerId === actor.id ||
     data.reviews.some(
@@ -937,6 +970,14 @@ export function changeActivity(
     canManageActivity(activity, actor),
     '无权管理该组织的活动。',
   );
+  requireCondition(
+    status !== '已公示',
+    '请提交公示审批，全部审批人同意后自动公示。',
+  );
+  requireCondition(
+    !activePublicationApproval(activity),
+    '审批中，请先撤回审批。',
+  );
   const allowed: Partial<Record<ActivityStatus, ActivityStatus[]>> = {
     草稿: ['报名中', '已取消'],
     报名中: ['评审中', '已取消'],
@@ -994,29 +1035,6 @@ export function changeActivity(
         ),
       '请等待全部参评项目的所有评审专家提交评审。',
     );
-  }
-  if (status === '已公示') {
-    requireCondition(
-      activity.noticeTitle.trim() && activity.noticeBody.trim(),
-      '请填写并保存公示标题和正文。',
-    );
-    validateAwards(
-      data,
-      activity,
-      data.entries
-        .filter((entry) => entry.activityId === id && entry.award)
-        .map((entry) => ({
-          entryId: entry.id,
-          award: entry.award,
-          reason: entry.awardReason ?? '',
-        })),
-    );
-    activity.publishedAt = nowText();
-    activity.noticeDate = activity.publishedAt.slice(0, 10);
-    activity.publications = [
-      ...(activity.publications ?? []),
-      makePublication(data, activity, actor.name),
-    ];
   }
   if (status === '报名中') {
     activity.registeredAt = nowText();
@@ -1246,14 +1264,27 @@ export function saveResults(
   title: string,
   body: string,
   date: string,
+  approverIds?: string[],
+  expectedRevision?: string,
 ) {
   const activity = activityOf(data, id);
+  requireCondition(
+    !activePublicationApproval(activity),
+    '审批中，请先撤回审批。',
+  );
+  requireCondition(
+    expectedRevision === undefined ||
+      expectedRevision === publicationApprovalRevision(activity),
+    '公示内容或审批轮次已变化，请刷新后重试。',
+  );
+  if (approverIds) validatePublicApprovers(approverIds);
   requireCondition(
     canManageActivity(activity, actor) &&
       (activity.status === '待公示' || !!activity.resultCorrection),
     '仅待公示阶段可登记结果。',
   );
   validateAwards(data, activity, awards);
+  if (approverIds) activity.publicApproverIds = [...approverIds];
   if (activity.resultCorrection) {
     Object.assign(activity.resultCorrection, {
       awards: copy(awards),
@@ -1442,41 +1473,252 @@ export function discardResultCorrection(
     canManageActivity(activity, actor) && activity.resultCorrection,
     '没有可放弃的结果更正。',
   );
+  requireCondition(
+    !activePublicationApproval(activity),
+    '审批中，请先撤回审批。',
+  );
   addHistory(activity, actor, '放弃结果更正', activity.resultCorrection.reason);
   delete activity.resultCorrection;
 }
+// 保留旧调用的明确拒绝，避免旧页面绕过会签发布。
 export function publishResultCorrection(
+  _data: CompetitionData,
+  _actor: Person,
+  _id: string,
+): never {
+  throw new Error('请提交公示审批，全部审批人同意后自动公示。');
+}
+
+export function activePublicationApproval(activity: Activity) {
+  return activity.publicationApprovals?.find(
+    (round) => round.status === '审批中',
+  );
+}
+export function pendingPublicationApproval(activity: Activity, actor: Person) {
+  return (
+    activePublicationApproval(activity)?.decisions.some(
+      (decision) =>
+        decision.personId === actor.id && decision.status === '待审批',
+    ) ?? false
+  );
+}
+// 只有本轮已经提交的审批人获得材料只读权限；配置但未提交不授予权限。
+export function canReadPublicationApproval(activity: Activity, actor: Person) {
+  return (
+    activity.publicationApprovals
+      ?.at(-1)
+      ?.decisions.some((decision) => decision.personId === actor.id) ?? false
+  );
+}
+function validatePublicApprovers(ids: string[]) {
+  requireCondition(new Set(ids).size === ids.length, '公示审批人不能重复。');
+  requireCondition(
+    ids.every((id) => people.some((p) => p.id === id)),
+    '公示审批人无效，请重新选择。',
+  );
+}
+export function publicationApprovalRevision(activity: Activity) {
+  return JSON.stringify([
+    activity.publicApproverIds ?? [],
+    activity.noticeTitle,
+    activity.noticeBody,
+    activity.resultCorrection,
+    activity.publicationApprovals ?? [],
+    activity.publications?.length ?? 0,
+    activity.status,
+    activity.history,
+  ]);
+}
+export function submitPublicationApproval(
   data: CompetitionData,
   actor: Person,
   id: string,
+  expectedRevision?: string,
 ) {
   const activity = activityOf(data, id);
-  const draft = activity.resultCorrection;
   requireCondition(
-    canManageActivity(activity, actor) &&
-      ['已公示', '已结束'].includes(activity.status) &&
-      draft,
-    '当前没有可发布的结果更正。',
+    canManageActivity(activity, actor),
+    '仅授权管理员可提交公示审批。',
   );
   requireCondition(
-    draft.title.trim() && draft.body.trim(),
-    '请填写并保存公示标题和正文；无获奖时请在正文说明。',
+    activity.status === '待公示' ||
+      (!!activity.resultCorrection &&
+        ['已公示', '已结束'].includes(activity.status)),
+    '当前阶段不能提交公示审批。',
   );
-  // 同样执行获奖有效性校验，不能因更正而跳过。
-  saveResults(data, actor, id, draft.awards, draft.title, draft.body, '');
-  for (const item of draft.awards) {
-    const entry = entryOf(data, item.entryId);
+  requireCondition(!activePublicationApproval(activity), '本轮审批尚未结束。');
+  requireCondition(
+    expectedRevision === undefined ||
+      expectedRevision === publicationApprovalRevision(activity),
+    '公示内容或审批轮次已变化，请刷新后重试。',
+  );
+  const ids = activity.publicApproverIds ?? [];
+  validatePublicApprovers(ids);
+  requireCondition(ids.length > 0, '请至少选择一位公示审批人并保存。');
+  const correction = activity.resultCorrection;
+  const title = correction?.title ?? activity.noticeTitle;
+  const body = correction?.body ?? activity.noticeBody;
+  requireCondition(title.trim() && body.trim(), '请填写并保存公示标题和正文。');
+  const awards =
+    correction?.awards ??
+    data.entries
+      .filter(
+        (e) => e.activityId === id && (e.status === '审核通过' || e.award),
+      )
+      .map((e) => ({
+        entryId: e.id,
+        award: e.award,
+        reason: e.awardReason ?? '',
+      }));
+  validateAwards(data, activity, awards);
+  // 在隔离副本中生成完整公示快照；本轮审批不会更改对外有效版本。
+  const prepared = copy(data);
+  const draftActivity = activityOf(prepared, id);
+  for (const item of awards) {
+    const entry = entryOf(prepared, item.entryId);
     entry.award = item.award;
     entry.awardReason = item.reason;
   }
-  activity.noticeTitle = draft.title;
-  activity.noticeBody = draft.body;
-  activity.publishedAt = nowText();
-  activity.noticeDate = activity.publishedAt.slice(0, 10);
-  activity.publications = [
-    ...(activity.publications ?? []),
-    makePublication(data, activity, actor.name, draft.reason),
+  draftActivity.noticeTitle = title;
+  draftActivity.noticeBody = body;
+  const publication = makePublication(
+    prepared,
+    draftActivity,
+    actor.name,
+    correction?.reason ?? '',
+  );
+  publication.publishedAt = '';
+  publication.noticeDate = '';
+  const round: PublicationApproval = {
+    id: `approval-${uid()}`,
+    status: '审批中',
+    kind: correction ? '结果更正' : '初次公示',
+    submittedBy: actor.id,
+    submittedName: actor.name,
+    submittedAt: nowText(),
+    endedAt: '',
+    decisions: ids.map((id) => {
+      const p = person(id);
+      return {
+        personId: id,
+        name: p.name,
+        department: p.department,
+        status: '待审批',
+        opinion: '',
+        at: '',
+      };
+    }),
+    snapshot: {
+      title,
+      body,
+      awards: copy(awards),
+      publication,
+      entryIds: data.entries
+        .filter((e) => e.activityId === id && e.status === '审核通过')
+        .map((e) => e.id),
+      baseVersion: activity.publications?.length ?? 0,
+    },
+  };
+  activity.publicationApprovals = [
+    ...(activity.publicationApprovals ?? []),
+    round,
   ];
-  addHistory(activity, actor, '发布结果更正', draft.reason);
-  delete activity.resultCorrection;
+  addHistory(activity, actor, '提交公示审批', round.id);
+  return round.id;
+}
+export function withdrawPublicationApproval(
+  data: CompetitionData,
+  actor: Person,
+  id: string,
+  roundId: string,
+) {
+  const activity = activityOf(data, id);
+  requireCondition(
+    canManageActivity(activity, actor),
+    '仅授权管理员可撤回审批。',
+  );
+  const round = activePublicationApproval(activity);
+  requireCondition(
+    round && round.id === roundId,
+    '审批轮次已变化或结束，请刷新。',
+  );
+  round.status = '已撤回';
+  round.endedAt = nowText();
+  round.withdrawnBy = actor.name;
+  addHistory(activity, actor, '撤回公示审批', round.id);
+}
+export function decidePublicationApproval(
+  data: CompetitionData,
+  actor: Person,
+  id: string,
+  roundId: string,
+  decision: '同意' | '驳回',
+  opinion: string,
+) {
+  const activity = activityOf(data, id);
+  const round = activePublicationApproval(activity);
+  requireCondition(
+    round && round.id === roundId,
+    '审批轮次已变化或结束，请刷新。',
+  );
+  const vote = round.decisions.find((item) => item.personId === actor.id);
+  requireCondition(
+    vote && vote.status === '待审批',
+    '您不是当前待处理审批人，或已完成审批。',
+  );
+  requireCondition(
+    decision === '同意' || decision === '驳回',
+    '无效的审批操作。',
+  );
+  requireCondition(decision !== '驳回' || opinion.trim(), '请填写驳回原因。');
+  requireCondition(
+    round.snapshot.baseVersion === (activity.publications?.length ?? 0),
+    '公示版本已变化，请刷新。',
+  );
+  requireCondition(
+    round.kind === '初次公示'
+      ? activity.status === '待公示'
+      : !!activity.resultCorrection &&
+          ['已公示', '已结束'].includes(activity.status),
+    '活动阶段已变化。',
+  );
+  const completed =
+    decision === '同意' &&
+    round.decisions.every(
+      (item) => item.personId === actor.id || item.status === '同意',
+    );
+  // 先完成所有校验；最后一票、公示和历史一起交由 store 原子保存。
+  if (completed) validateAwards(data, activity, round.snapshot.awards);
+  const at = nowText();
+  Object.assign(vote, { status: decision, opinion: opinion.trim(), at });
+  if (decision === '驳回') {
+    round.status = '已驳回';
+    round.endedAt = at;
+  } else if (completed) {
+    for (const item of round.snapshot.awards) {
+      Object.assign(entryOf(data, item.entryId), {
+        award: item.award,
+        awardReason: item.reason,
+      });
+    }
+    const publication = copy(round.snapshot.publication);
+    publication.publishedAt = at;
+    publication.noticeDate = at.slice(0, 10);
+    activity.noticeTitle = publication.title;
+    activity.noticeBody = publication.body;
+    activity.publishedAt = at;
+    activity.noticeDate = publication.noticeDate;
+    activity.publications = [...(activity.publications ?? []), publication];
+    if (round.kind === '初次公示') activity.status = '已公示';
+    delete activity.resultCorrection;
+    round.status = '已通过';
+    round.endedAt = at;
+    addHistory(
+      activity,
+      actor,
+      '会签通过自动公示',
+      `第 ${publication.version} 版`,
+    );
+  }
+  addHistory(activity, actor, `公示审批${decision}`, opinion.trim());
 }

@@ -25,6 +25,7 @@ import ImsTable from './components/ImsTable.vue';
 import { createDetailStack } from './detail-dialog';
 import {
   activityStates,
+  pendingPublicationApproval,
   canApply,
   canDeleteEntry,
   canManageActivity,
@@ -400,6 +401,18 @@ watch(() => actor.value.id, reset);
         </template>
         <template #actions="{ row }">
           <Space>
+            <Button
+              v-if="
+                view === 'activities' &&
+                data.activities.some(
+                  (a) =>
+                    a.id === row.id && pendingPublicationApproval(a, actor),
+                )
+              "
+              type="link"
+              @click="details(row.id)"
+              >审批</Button
+            >
             <Button type="link" @click="details(row.id)">
               {{
                 view === 'reviews' && row.status !== '已提交' ? '评审' : '明细'

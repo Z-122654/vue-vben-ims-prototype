@@ -1,3 +1,4 @@
+import { approveForTest } from './publication-test-support';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -20,7 +21,6 @@ import {
   person,
   projectLeader,
   publishedEntry,
-  publishResultCorrection,
   returnReview,
   saveEntry,
   saveResults,
@@ -69,16 +69,14 @@ describe('第2批公示与数据规则', () => {
       });
       Object.assign(entry, { award, awardReason: reason, status });
       const before = copy(data);
-      expect(() =>
-        changeActivity(data, manager, activity.id, '已公示'),
-      ).toThrow(message);
+      expect(() => approveForTest(data, manager, activity.id)).toThrow(message);
       expect(data).toEqual(before);
       Object.assign(entry, {
         award: '一等奖',
         awardReason: '经评议确认',
         status: '审核通过',
       });
-      changeActivity(data, manager, activity.id, '已公示');
+      approveForTest(data, manager, activity.id);
       expect(
         currentPublication(activity)?.winners.find((e) => e.id === entry.id)
           ?.awardReason,
@@ -199,9 +197,7 @@ describe('第2批公示与数据规则', () => {
       '',
       '',
     );
-    expect(() => changeActivity(data, manager, activity.id, '已公示')).toThrow(
-      '正文',
-    );
+    expect(() => approveForTest(data, manager, activity.id)).toThrow('正文');
     expect(activity.publications).toBeUndefined();
     saveResults(
       data,
@@ -212,7 +208,7 @@ describe('第2批公示与数据规则', () => {
       '本次无获奖项目，后续继续完善。',
       '',
     );
-    changeActivity(data, manager, activity.id, '已公示');
+    approveForTest(data, manager, activity.id);
     expect(currentPublication(activity)?.winners).toHaveLength(0);
     const first = copy(currentPublication(activity)!);
     expect(() =>
@@ -234,7 +230,7 @@ describe('第2批公示与数据规则', () => {
     expect(currentPublication(activity)).toEqual(first);
     expect(entries[0]!.award).toBe('');
     vi.setSystemTime(new Date('2026-10-28T11:00:00'));
-    publishResultCorrection(data, manager, activity.id);
+    approveForTest(data, manager, activity.id);
     expect(activity.publications).toHaveLength(2);
     expect(activity.publications![0]).toEqual(first);
     expect(currentPublication(activity)).toMatchObject({
@@ -260,7 +256,7 @@ describe('第2批公示与数据规则', () => {
       expect(() =>
         beginResultCorrection(data, actor, activity.id, '更正'),
       ).toThrow('授权');
-      expect(() => publishResultCorrection(data, actor, activity.id)).toThrow();
+      expect(() => approveForTest(data, actor, activity.id)).toThrow();
     }
     beginResultCorrection(data, manager, activity.id, '改正错字');
     expect(() =>
@@ -269,7 +265,7 @@ describe('第2批公示与数据规则', () => {
     discardResultCorrection(data, manager, activity.id);
     expect(currentPublication(activity)).toEqual(original);
     beginResultCorrection(data, manager, activity.id, '改正错字');
-    publishResultCorrection(data, manager, activity.id);
+    approveForTest(data, manager, activity.id);
     expect(activity.status).toBe('已结束');
     expect(activity.publications).toHaveLength(2);
   });

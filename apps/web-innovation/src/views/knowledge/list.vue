@@ -42,6 +42,8 @@ import { ask, perform } from './ui';
 
 import './ims.css';
 const props = defineProps<{ view: 'manage' | 'search' }>();
+// 临时隐藏列表整理入口，保留原选择及带入流程。
+const showKnowledgeImportEntry = false;
 const picker = ref(false);
 const deleting = ref(false);
 const sources = useSourceData();
@@ -317,7 +319,9 @@ watch(selectedType, () => {
             >
               ＋ 新增知识 </Button
             ><Button
-              v-if="view === 'manage' && actor.admin"
+              v-if="
+                showKnowledgeImportEntry && view === 'manage' && actor.admin
+              "
               type="primary"
               @click="picker = true"
             >

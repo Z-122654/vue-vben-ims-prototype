@@ -1,3 +1,4 @@
+import { approveForTest } from './publication-test-support';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -324,9 +325,9 @@ describe('竞赛独立业务流程', () => {
         true,
       );
     changeActivity(data, manager, 'activity-review', '待公示');
-    expect(() =>
-      changeActivity(data, manager, 'activity-review', '已公示'),
-    ).toThrow('公示标题和正文');
+    expect(() => approveForTest(data, manager, 'activity-review')).toThrow(
+      '公示标题和正文',
+    );
     saveResults(
       data,
       manager,
@@ -336,7 +337,7 @@ describe('竞赛独立业务流程', () => {
       '公示正文',
       '2026-10-20',
     );
-    changeActivity(data, manager, 'activity-review', '已公示');
+    approveForTest(data, manager, 'activity-review');
     expect(data.entries.find((e) => e.id === 'entry-5')!.award).toBe('一等奖');
     expect(() =>
       saveResults(data, manager, 'activity-review', [], '', '', ''),

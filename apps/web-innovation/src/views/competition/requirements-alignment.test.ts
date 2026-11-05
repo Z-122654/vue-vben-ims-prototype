@@ -1,3 +1,4 @@
+import { approveForTest } from './publication-test-support';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -119,9 +120,7 @@ describe('需求核对后补齐的边界', () => {
       .filter((e) => e.activityId === activity.id)
       .map((e) => ({ entryId: e.id, award: '', reason: '' }));
     saveResults(data, manager, activity.id, awards, '结果公示', ' ', '');
-    expect(() => changeActivity(data, manager, activity.id, '已公示')).toThrow(
-      '正文',
-    );
+    expect(() => approveForTest(data, manager, activity.id)).toThrow('正文');
     saveResults(
       data,
       manager,
@@ -131,7 +130,7 @@ describe('需求核对后补齐的边界', () => {
       '评选情况见本次说明。',
       '',
     );
-    changeActivity(data, manager, activity.id, '已公示');
+    approveForTest(data, manager, activity.id);
     expect(currentPublication(activity)?.winners).toHaveLength(0);
   });
 

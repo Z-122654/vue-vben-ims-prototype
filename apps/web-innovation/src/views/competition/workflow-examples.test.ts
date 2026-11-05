@@ -1,3 +1,4 @@
+import { approveForTest } from './publication-test-support';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -90,7 +91,7 @@ describe('完整状态演示数据', () => {
     expect(
       data.reviews.filter((r) => r.entryId === 'demo-workflow-entry-ready'),
     ).toHaveLength(2);
-    changeActivity(data, manager, 'demo-workflow-pending-result', '已公示');
+    approveForTest(data, manager, 'demo-workflow-pending-result');
     changeActivity(data, manager, 'demo-workflow-published', '已结束');
     expect(
       data.activities.find((a) => a.id === 'demo-workflow-pending-result')!

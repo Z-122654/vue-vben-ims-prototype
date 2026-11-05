@@ -8,6 +8,7 @@ import {
   nowText,
   person,
 } from './model';
+import { addApprovalExamples } from './approval-examples';
 import { workflowExamplePack, workflowExamples } from './workflow-examples';
 
 // 全部人物、项目和效益为虚构演示数据。日期相对首次初始化日生成。
@@ -222,13 +223,15 @@ export function seedData(): CompetitionData {
       },
     ],
   });
-  return normalizeCompetitionData({
-    ...data,
-    activities: [...data.activities, ...examples.activities],
-    entries: [...data.entries, ...examples.entries],
-    reviews: [...data.reviews, ...examples.reviews],
-    demoPacks: [workflowExamplePack],
-  });
+  return addApprovalExamples(
+    normalizeCompetitionData({
+      ...data,
+      activities: [...data.activities, ...examples.activities],
+      entries: [...data.entries, ...examples.entries],
+      reviews: [...data.reviews, ...examples.reviews],
+      demoPacks: [workflowExamplePack],
+    }),
+  );
 }
 
 // 已有浏览器仅补充新示例，保留其原记录、附件及评分；重复加载不覆盖示例上的后续操作。

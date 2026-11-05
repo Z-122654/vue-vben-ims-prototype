@@ -1,3 +1,4 @@
+import { approveForTest } from './publication-test-support';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -427,7 +428,7 @@ describe('第1批主流程与权限', () => {
       '2000-01-01',
     );
     expect(activity.noticeDate).toBe('');
-    changeActivity(data, manager, activity.id, '已公示');
+    approveForTest(data, manager, activity.id);
     expect(activity.noticeDate).toBe('2026-10-27');
     changeActivity(data, manager, activity.id, '已结束');
     expect(activity.endedAt).toBe(nowText());

@@ -26,9 +26,18 @@ import CompetitionFrame from './components/CompetitionFrame.vue';
 import ImsSection from './components/ImsSection.vue';
 import ImsTable from './components/ImsTable.vue';
 import PublicationHistory from './components/PublicationHistory.vue';
+import PublicationApprovalFlow from './components/PublicationApprovalFlow.vue';
 import ScoringTable from './components/ScoringTable.vue';
 import { useDetailDialog } from './detail-dialog';
 import {
+  activePublicationApproval,
+  canReadPublicationApproval,
+  pendingPublicationApproval,
+  publicationApprovalRevision,
+  submitPublicationApproval,
+  decidePublicationApproval,
+  withdrawPublicationApproval,
+  people,
   activityExpertConflicts,
   activityPublisherLabel,
   activityTypeOptions,
@@ -50,7 +59,6 @@ import {
   newActivity,
   person,
   projectLeader,
-  publishResultCorrection,
   returnReview,
   reviewOverdue,
   saveActivity,
@@ -59,16 +67,28 @@ import {
 import { useCompetition } from './store';
 import { confirmAction, exportCsv, perform, statusColor } from './ui';
 
-const { data, actor, commit } = useCompetition();
+const { data, actor, commit, refresh } = useCompetition();
 const { recordId, openDetail, replaceId, close, onBeforeClose } =
   useDetailDialog();
 const form = ref<Activity>(newActivity(actor.value));
 const managing = computed(() => canManageActivity(form.value, actor.value));
+const flowOpen = ref(false);
+const decisionAction = ref<'' | '同意' | '驳回'>('');
+const decisionRound = ref('');
+const decisionOpinion = ref('');
+const approval = computed(() => activePublicationApproval(form.value));
+const approvalReader = computed(() =>
+  canReadPublicationApproval(form.value, actor.value),
+);
+const pendingApproval = computed(() =>
+  pendingPublicationApproval(form.value, actor.value),
+);
 const deadlineOpen = ref(false);
 const deadlineValue = ref('');
 const deadlineReason = ref('');
 const original = ref('');
 const originalAwards = ref('');
+const loadedApprovalRevision = ref('');
 const activeTab = ref('info');
 const reviewsTable = ref<InstanceType<typeof ImsTable>>();
 const reasonAction = ref<'' | 'cancel' | 'correct'>('');
@@ -96,6 +116,7 @@ const expertsEditable = computed(
 const resultsEditable = computed(
   () =>
     managing.value &&
+    !approval.value &&
     (form.value.status === '待公示' || !!form.value.resultCorrection),
 );
 const dirty = computed(
@@ -109,7 +130,10 @@ const {
   setAttachmentTable,
   attachmentsReady,
   confirmDiscard,
-} = useAttachmentGuard(dirty, load);
+} = useAttachmentGuard(dirty, () => {
+  if (refresh) perform(refresh);
+  load();
+});
 const entries = computed(() =>
   data.value.entries
     .filter((e) => e.activityId === form.value.id)
@@ -159,23 +183,36 @@ const next = computed<undefined | { status: ActivityStatus; label: string }>(
       草稿: { status: '报名中', label: '发布活动' },
       报名中: { status: '评审中', label: '开启评审' },
       评审中: { status: '待公示', label: '完成评审' },
-      待公示: { status: '已公示', label: '发布公示' },
       已公示: { status: '已结束', label: '结束活动' },
     };
     return mapping[form.value.status];
   },
 );
 function load() {
+  loadedApprovalRevision.value = existing.value
+    ? publicationApprovalRevision(existing.value)
+    : '';
   form.value = existing.value ? copy(existing.value) : newActivity(actor.value);
   if (form.value.resultCorrection) {
     form.value.noticeTitle = form.value.resultCorrection.title;
     form.value.noticeBody = form.value.resultCorrection.body;
+  }
+  const round =
+    activePublicationApproval(form.value) ??
+    (!managing.value && approvalReader.value
+      ? form.value.publicationApprovals?.at(-1)
+      : undefined);
+  if (round) {
+    form.value.noticeTitle = round.snapshot.title;
+    form.value.noticeBody = round.snapshot.body;
   }
   original.value = JSON.stringify(form.value);
   for (const id of Object.keys(awards)) delete awards[id];
   for (const e of entries.value)
     awards[e.id] = { award: e.award, reason: e.awardReason };
   for (const item of form.value.resultCorrection?.awards ?? [])
+    awards[item.entryId] = { award: item.award, reason: item.reason };
+  for (const item of round?.snapshot.awards ?? [])
     awards[item.entryId] = { award: item.award, reason: item.reason };
   originalAwards.value = JSON.stringify(awards);
 }
@@ -254,6 +291,15 @@ function transition() {
           }),
         )
       ) {
+        const round =
+          activePublicationApproval(form.value) ??
+          (!managing.value && approvalReader.value
+            ? form.value.publicationApprovals?.at(-1)
+            : undefined);
+        if (round) {
+          form.value.noticeTitle = round.snapshot.title;
+          form.value.noticeBody = round.snapshot.body;
+        }
         original.value = JSON.stringify(form.value);
         if (isNew.value) replaceId(id);
       }
@@ -299,17 +345,57 @@ function applyReason() {
     if (action === 'correct') activeTab.value = 'results';
   }
 }
-function publishCorrection() {
+function submitApproval() {
   if (dirty.value) {
     perform(() => {
-      throw new Error('存在未保存的更正内容，请先保存再重新发布。');
+      throw new Error('请先保存获奖名单、公示内容和审批人。');
     });
     return;
   }
+  const revision = publicationApprovalRevision(existing.value!);
   confirmAction(
-    '重新发布更正结果？',
-    () => commit((d) => publishResultCorrection(d, actor.value, form.value.id)),
-    '发布成功后替换对外有效版本，旧公示版本和更正原因保留供管理员查阅。',
+    '提交公示审批？',
+    () =>
+      commit((d) =>
+        submitPublicationApproval(d, actor.value, form.value.id, revision),
+      ),
+    '提交后锁定本轮内容，全部所选审批人同意后自动公示；任一人驳回需重新提交全员审批。',
+  );
+}
+function openDecision(action: '同意' | '驳回') {
+  decisionAction.value = action;
+  decisionRound.value = approval.value?.id ?? '';
+  decisionOpinion.value = '';
+}
+function decide() {
+  if (!decisionAction.value) return;
+  const decision = decisionAction.value;
+  if (
+    perform(() =>
+      commit((d) =>
+        decidePublicationApproval(
+          d,
+          actor.value,
+          form.value.id,
+          decisionRound.value,
+          decision,
+          decisionOpinion.value,
+        ),
+      ),
+    )
+  ) {
+    decisionAction.value = '';
+  }
+}
+function withdrawApproval() {
+  const roundId = approval.value?.id ?? '';
+  confirmAction(
+    '撤回本轮公示审批？',
+    () =>
+      commit((d) =>
+        withdrawPublicationApproval(d, actor.value, form.value.id, roundId),
+      ),
+    '本轮审批结束，重新提交后全部审批人须重新审批。',
   );
 }
 function results() {
@@ -327,6 +413,8 @@ function results() {
         form.value.noticeTitle,
         form.value.noticeBody,
         form.value.noticeDate,
+        form.value.publicApproverIds ?? [],
+        loadedApprovalRevision.value,
       ),
     ),
   );
@@ -349,6 +437,26 @@ onBeforeClose(() => confirmDiscard());
         <Button type="primary" @click="confirmDiscard(true)">
           <RefreshCw :size="15" />刷新
         </Button>
+        <Button v-if="resultsEditable" type="primary" @click="results"
+          >保存公示设置</Button
+        >
+        <Button v-if="resultsEditable" @click="submitApproval">提交审批</Button>
+        <Button v-if="managing && approval" @click="withdrawApproval"
+          >撤回审批</Button
+        >
+        <Button v-if="pendingApproval" @click="openDecision('同意')"
+          >同意</Button
+        >
+        <Button v-if="pendingApproval" danger @click="openDecision('驳回')"
+          >驳回</Button
+        >
+        <Button
+          v-if="
+            (managing || approvalReader) && form.publicationApprovals?.length
+          "
+          @click="flowOpen = true"
+          >流程图</Button
+        >
         <Button
           v-if="managing && ['报名中', '评审中'].includes(form.status)"
           @click="openDeadline"
@@ -356,7 +464,7 @@ onBeforeClose(() => confirmDiscard());
           调整计划截止
         </Button>
         <Button
-          v-if="managing && next && !form.resultCorrection"
+          v-if="managing && next && !form.resultCorrection && !approval"
           :disabled="pendingAttachments > 0"
           @click="transition"
         >
@@ -380,8 +488,7 @@ onBeforeClose(() => confirmDiscard());
         >
           更正结果
         </Button>
-        <template v-if="managing && form.resultCorrection">
-          <Button @click="publishCorrection">重新发布公示</Button>
+        <template v-if="managing && form.resultCorrection && !approval">
           <Button
             danger
             @click="
@@ -610,6 +717,29 @@ onBeforeClose(() => confirmDiscard());
                 </FormItem>
               </ImsSection>
             </Form>
+            <ImsSection
+              v-if="['待公示', '已公示', '已结束'].includes(form.status)"
+              title="审批人设置"
+            >
+              <Form
+                :disabled="!resultsEditable"
+                :label-col="{ style: { width: '112px' } }"
+              >
+                <FormItem label="公示审批人" required>
+                  <Select
+                    v-model:value="form.publicApproverIds"
+                    mode="multiple"
+                    placeholder="请选择公示审批人"
+                    :options="
+                      people.map((p) => ({
+                        value: p.id,
+                        label: `${p.name} · ${p.department}`,
+                      }))
+                    "
+                  />
+                </FormItem>
+              </Form>
+            </ImsSection>
             <ImsSection title="活动附件">
               <AttachmentTable
                 :ref="setAttachmentTable"
@@ -620,7 +750,11 @@ onBeforeClose(() => confirmDiscard());
               />
             </ImsSection>
           </TabPane>
-          <TabPane v-if="form.showcase && !isNew" key="showcase" tab="参赛作品">
+          <TabPane
+            v-if="(form.showcase || approvalReader) && !isNew"
+            key="showcase"
+            tab="参赛作品"
+          >
             <ImsSection title="审核通过的参赛作品">
               <p class="rule-caption">
                 项目明细以只读表单展示全部基本信息。普通浏览者仅可查看公开附件，不开放内部附件、流程记录和专家评分。
@@ -704,7 +838,11 @@ onBeforeClose(() => confirmDiscard());
               </ImsTable>
             </ImsSection>
           </TabPane>
-          <TabPane v-if="managing && !isNew" key="reviews" tab="专家评审记录">
+          <TabPane
+            v-if="(managing || approvalReader) && !isNew"
+            key="reviews"
+            tab="专家评审记录"
+          >
             <ImsSection title="专家独立评审记录">
               <div class="rule-caption">
                 评审专家在“活动信息”中统一配置；开启评审后，每个参评项目由全部所选专家独立评审。
@@ -763,7 +901,11 @@ onBeforeClose(() => confirmDiscard());
                   >
                     明细 </Button
                   ><Button
-                    v-if="form.status === '评审中' && row.status === '已提交'"
+                    v-if="
+                      managing &&
+                      form.status === '评审中' &&
+                      row.status === '已提交'
+                    "
                     type="link"
                     @click="
                       reviewReturn = row.id;
@@ -776,7 +918,11 @@ onBeforeClose(() => confirmDiscard());
               </ImsTable>
             </ImsSection>
           </TabPane>
-          <TabPane v-if="managing && !isNew" key="results" tab="获奖登记与公示">
+          <TabPane
+            v-if="(managing || approvalReader) && !isNew"
+            key="results"
+            tab="获奖登记与公示"
+          >
             <ImsSection v-if="form.resultCorrection" title="结果更正信息">
               <Form :label-col="{ style: { width: '112px' } }" disabled>
                 <div class="ims-form-grid">
@@ -795,7 +941,7 @@ onBeforeClose(() => confirmDiscard());
                 </div>
               </Form>
               <p class="rule-caption">
-                更正草稿仅管理员可见，保存不会改变当前公示。保存后点击“重新发布公示”生效；旧版本永久保留在本次演示数据中。
+                更正内容经全部所选审批人同意后生效；审批期间沿用原公示、证书及知识引用。
               </p>
             </ImsSection>
             <ImsSection title="手工登记获奖名单">
@@ -880,7 +1026,10 @@ onBeforeClose(() => confirmDiscard());
                 保存获奖名单与公示内容
               </Button>
             </ImsSection>
-            <ImsSection v-if="form.publications?.length" title="公示版本记录">
+            <ImsSection
+              v-if="managing && form.publications?.length"
+              title="公示版本记录"
+            >
               <ImsTable
                 :rows="
                   form.publications.map((p) => ({
@@ -928,6 +1077,28 @@ onBeforeClose(() => confirmDiscard());
         返回活动中心
       </Button>
     </div>
+    <PublicationApprovalFlow
+      v-model:open="flowOpen"
+      :activity="form"
+      :actor="actor"
+    />
+    <Modal
+      :open="!!decisionAction"
+      :title="`公示审批 · ${decisionAction}`"
+      class="competition-page competition-dialog-content"
+      ok-text="确定"
+      cancel-text="取消"
+      @cancel="decisionAction = ''"
+      @ok="decide"
+    >
+      <ImsSection title="审批意见">
+        <Form layout="vertical">
+          <FormItem label="意见" :required="decisionAction === '驳回'">
+            <Input.TextArea v-model:value="decisionOpinion" :rows="4" />
+          </FormItem>
+        </Form>
+      </ImsSection>
+    </Modal>
     <Modal
       :open="!!reasonAction"
       class="competition-page competition-dialog-content"

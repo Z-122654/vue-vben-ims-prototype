@@ -3,7 +3,15 @@ import type { SourceData } from './sources';
 
 import { beforeEach, expect, it } from 'vitest';
 
-import { currentPublication } from '../competition/model';
+import {
+  beginResultCorrection,
+  canDownloadCertificate,
+  currentPublication,
+  decidePublicationApproval,
+  person as competitionPerson,
+  saveResults,
+  submitPublicationApproval,
+} from '../competition/model';
 import { seedData as competitionSeeds } from '../competition/seed';
 import { seedData as exchangeSeeds } from '../exchange/seed';
 import { seedData as researchSeeds } from '../research/seed';
@@ -789,4 +797,63 @@ it('多条有效关联一起标记移除，未选关系保留且保存后可追�
     keys,
   );
   expect(all[0]!.body).toEqual(form.body);
+});
+
+it('竞赛更正会签未完成沿用旧知识来源及证书，全部通过才切换版本', () => {
+  const competition = data.competition;
+  const activity = competition.activities.find(
+    (a) => a.id === 'demo-workflow-published',
+  )!;
+  const publication = copy(currentPublication(activity)!);
+  const winner = publication.winners[0]!;
+  const source = selection('competition', activity.id, winner.id);
+  const before = resolveSource(source, admin, data);
+  const manager = competitionPerson('manager');
+  const leader = competitionPerson('employee-c');
+  beginResultCorrection(competition, manager, activity.id, '修正奖项');
+  saveResults(
+    competition,
+    manager,
+    activity.id,
+    competition.entries
+      .filter((e) => e.activityId === activity.id)
+      .map((e) => ({
+        entryId: e.id,
+        award: e.id === winner.id ? '三等奖' : e.award,
+        reason: '更正确认依据',
+      })),
+    '更正后公示',
+    '完整公示正文',
+    '',
+    [leader.id, 'expert-b'],
+  );
+  const round = submitPublicationApproval(competition, manager, activity.id);
+  decidePublicationApproval(
+    competition,
+    leader,
+    activity.id,
+    round,
+    '同意',
+    '',
+  );
+  expect(resolveSource(source, admin, data)).toEqual(before);
+  expect(currentPublication(activity)).toEqual(publication);
+  expect(canDownloadCertificate(activity, winner, leader)).toBe(false);
+  decidePublicationApproval(
+    competition,
+    competitionPerson('expert-b'),
+    activity.id,
+    round,
+    '同意',
+    '',
+  );
+  const after = resolveSource(source, admin, data);
+  expect(after.state).toBe('ok');
+  if (after.state === 'ok')
+    expect(after.record.version).toBe(String(publication.version + 1));
+  expect(
+    currentPublication(activity)?.winners.find((w) => w.id === winner.id)
+      ?.award,
+  ).toBe('三等奖');
+  expect(activity.publications![0]).toEqual(publication);
 });
