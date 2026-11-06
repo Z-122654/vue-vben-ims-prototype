@@ -59,7 +59,8 @@ pre-commit:
       stage_fixed: true
     - name: stylelint
       glob: '*.{vue,css,less,scss}'
-      run: pnpm exec stylelint --fix {staged_files}
+      # Static public CSS is ignored by .stylelintignore; allow that to be the only input.
+      run: pnpm exec stylelint --fix --allow-empty-input {staged_files}
       stage_fixed: true
     - name: checkType
       run: pnpm check:type

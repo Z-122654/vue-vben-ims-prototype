@@ -9,6 +9,13 @@
 - 地址：<https://z-122654.github.io/vue-vben-ims-prototype/>。
 - 源码仓库公开，Pages 演示页面也公开；演示账号不作为访问保护。
 
+## 经营数据大屏入口
+
+- 独立链接：<https://z-122654.github.io/vue-vben-ims-prototype/dashboards/operation/index.html>，无需登录。
+- 系统登录后点击一级菜单“经营数据大屏”，在新标签页打开同一地址。
+- 文件位于 `public/dashboards/operation/`，包含原型和其使用的图片、本地 ECharts 及许可文件，随现有构建发布，无需新增服务或部署工作流。
+- 所有业务值均为模拟数据，公开展示范围与现有原型站一致。
+
 ## 登录和数据
 
 生产配置启用 `VITE_STATIC_DEMO=true`，模拟登录、用户资料及权限码由应用内代码提供，菜单使用本地路由。无需外部 Mock 接口或服务端。

@@ -17,6 +17,14 @@
 
 本应用与 `web-antd` 拥有各自的源码、路由和启动脚本，当前基础结构相近。应用内使用 `#/` 别名，共享能力使用 `@vben/*`；功能演进以本应用需求为准。
 
+## 经营数据大屏
+
+- 独立静态原型位于 `public/dashboards/operation/`，随 Vite 构建复制到发布目录。
+- 直接访问 `${BASE_URL}dashboards/operation/index.html` 即可展示，无需演示登录。
+- 系统一级菜单“经营数据大屏”使用现有外链菜单机制在新标签页打开；菜单地址按 `import.meta.env.BASE_URL` 生成，兼容开发根路径与 GitHub Pages 子目录。手动访问 `/operation-dashboard` 路由时使用现有 IFrameView 展示。
+- 保留 1920×1080 等比缩放、9个模块、1—10月联动及三个组件的页签轮播；数据为固定模拟月度值，不接后端。背景、集团标识和 ECharts 均随原型打包，无外网资源依赖。
+- 发布副本自包含；后续修改此目录并沿用现有 Pages 发布流程，原 IMS 仓库 `prototype/经营数据大屏` 不自动同步。
+
 ## Mock 方式
 
 - 登录页保留演示账号选择与账号密码校验，取消滑块验证，便于原型测试。开发环境使用 Nitro Mock；生产静态构建通过 `VITE_STATIC_DEMO=true` 使用应用内模拟登录、用户资料和权限码，无需启动 Mock 服务。演示账号 `vben/admin/jack`，密码均为 `123456`，业务角色继续在各模块中切换。
