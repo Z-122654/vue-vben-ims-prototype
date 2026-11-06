@@ -27,14 +27,17 @@
           </div>
         </div>
 
-        <section class="overview" data-module="1" aria-label="月度经营概览">
-          <div class="overview-heading"><span>01 / 月度经营概览</span><span class="selected-period"></span></div>
-          <div class="overview-main">
-            <div class="profit-summary"><span class="metric-label">月度利润总额</span><div><strong id="profit-value"></strong><span class="unit">万元</span><span id="profit-status" class="status"></span></div></div>
-            <div class="overview-secondary"><span class="metric-label">营业成本</span><div><strong id="cost-value"></strong><span class="unit">万元</span></div></div>
-            <div class="overview-secondary"><span class="metric-label">容量电费收入 <small>含税</small></span><div><strong id="capacity-value"></strong><span class="unit">万元</span></div></div>
+        <section class="overview" data-module="1" aria-label="经营概览">
+          <div class="overview-heading">
+            <span>01 / 经营概览</span>
+            <span id="overview-period"></span>
+            <div class="overview-tabs" aria-label="经营概览时间口径">
+              <button data-overview-period="monthly" class="active" aria-pressed="true" aria-controls="overview-profits">月度</button>
+              <button data-overview-period="annual" aria-pressed="false" aria-controls="overview-profits">年度</button>
+            </div>
           </div>
-          <div class="overview-caption">所选月份经营结果 <span>当月值 · 非年累计</span></div>
+          <div id="overview-profits" class="profit-grid" aria-live="polite"></div>
+          <div class="overview-caption"><span id="overview-basis">当月经营结果</span><span>单位：万元</span></div>
         </section>
 
         <section class="panel right top" data-module="2">

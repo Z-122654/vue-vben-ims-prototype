@@ -11,8 +11,10 @@
   // Codes match the corrected indicator workbook. Mock margin values are independent inputs.
   const metrics = {
     profit: ['CW_Q3010300923_ACT_ALL', [680, -240, 920, 1160, 780, 1520, 1980, 2240, 1870, 2168]],
-    cost: ['CW_Q3010400434_ACT_ALL', [16_200, 14_800, 17_300, 16_800, 18_100, 19_200, 22_300, 23_700, 20_400, 19_860]],
-    capacity: ['CW_Q9000000399_ACT_ALL', [880, 880, 920, 920, 920, 960, 960, 960, 980, 980]],
+    coalProfit: ['CW_Q3010300923_ACT_COAL', [410, -180, 570, 720, 460, 940, 1240, 1390, 1150, 1340]],
+    gasProfit: ['CW_Q3010300923_ACT_GAS', [160, -140, 210, 280, 180, 390, 510, 590, 480, 568]],
+    heatProfit: ['CW_Q3010300923_ACT_HEAT', [70, 50, 85, 100, 90, 120, 130, 140, 145, 150]],
+    newEnergyProfit: ['CW_Q3010300923_ACT_NEWENERGY', [40, 30, 55, 60, 50, 70, 100, 120, 95, 110]],
     electricityIncome: ['CW_Q2000500355_ACT_ALL', [16_950, 15_220, 18_260, 18_080, 19_240, 21_050, 24_760, 26_580, 22_480, 22_360]],
     heatIncome: ['CW_Q2040600085_ACT_ALL', [1180, 1060, 1340, 1290, 1410, 1490, 1580, 1620, 1520, 1460]],
     powerTarget: ['CW_Q2010100004_BUD_ALL', [36_000, 34_000, 38_000, 37_000, 39_000, 42_000, 48_000, 50_000, 44_000, 43_000]],
@@ -46,6 +48,19 @@
     spotVolume: ['CW_Q9000000385_ACT_ALL', [4100, 3600, 5100, 5200, 4900, 5800, 6700, 7400, 5400, 6120]],
     spotPrice: ['CW_Q9000000386_ACT_ALL', [531, 498, 548, 562, 539, 578, 611, 632, 586, 574]],
   };
+  const profitItems = [
+    ['profit', '利润总额'], ['coalProfit', '煤机利润'], ['gasProfit', '燃机利润'],
+    ['heatProfit', '供热利润'], ['newEnergyProfit', '新能源利润'],
+  ];
+  // Prototype annual snapshots use year-to-date mock values, not a confirmed backend rule.
+  // Keep annual codes separate so real annual data can later replace these snapshots.
+  const annualMetrics = Object.fromEntries(profitItems.map(([key]) => {
+    let cumulative = 0;
+    return [key, [`${metrics[key][0]}_YEAR`, metrics[key][1].map((amount) => {
+      cumulative += amount;
+      return cumulative;
+    })]];
+  }));
   const previousCosts = {
     materials: [57, 54, 68, 63, 69, 79, 85, 83, 74, 71],
     repairs: [95, 112, 153, 129, 168, 140, 124, 119, 145, 128],
@@ -54,7 +69,7 @@
   };
   const expenseKeys = ['materials', 'repairs', 'operations', 'entrusted'];
   const expenseNames = ['材料费', '修理费', '生产运行费', '委托运营费'];
-  const state = { month: 10, playing: true };
+  const state = { month: 10, playing: true, overviewPeriod: 'monthly' };
   const panels = {
     power: { view: 'execution', views: ['execution', 'structure'], remaining: 20_000, manualUntil: 0, hovering: false },
     cost: { view: 'production', views: ['production', 'fuel'], remaining: 27_000, manualUntil: 0, hovering: false },
@@ -96,12 +111,20 @@
     charts.get(id).setOption(option, { notMerge: true, lazyUpdate: false });
   }
   function overview() {
-    $('#profit-value').textContent = format(value('profit'));
-    $('#profit-value').classList.toggle('negative', value('profit') < 0);
-    $('#profit-status').textContent = ['亏损', '持平', '盈利'][Math.sign(value('profit')) + 1];
-    $('#profit-status').classList.toggle('negative', value('profit') < 0);
-    $('#cost-value').textContent = format(value('cost'));
-    $('#capacity-value').textContent = format(value('capacity'));
+    const annual = state.overviewPeriod === 'annual';
+    const source = annual ? annualMetrics : metrics;
+    $('#overview-profits').innerHTML = profitItems.map(([key, label]) => {
+      const amount = source[key][1][index()];
+      return `<div class="profit-card"><span class="metric-label">${label}</span><strong class="${amount < 0 ? 'negative' : ''}">${format(amount)}</strong></div>`;
+    }).join('');
+    $('.overview').classList.toggle('annual', annual);
+    $('#overview-period').textContent = annual ? `2026年截至${state.month}月累计` : `2026年${state.month}月`;
+    $('#overview-basis').textContent = annual ? '年度暂按年累计口径模拟' : '当月经营结果 · 非年累计';
+    document.querySelectorAll('[data-overview-period]').forEach((button) => {
+      const active = button.dataset.overviewPeriod === state.overviewPeriod;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
     document.querySelectorAll('.selected-period').forEach((el) => { el.textContent = `2026年${String(state.month).padStart(2, '0')}月`; });
   }
   function income() {
@@ -227,6 +250,17 @@
   }
   $('#month').innerHTML = Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}" ${i === 9 ? 'selected' : ''}>2026年${String(i + 1).padStart(2, '0')}月</option>`).join('');
   $('#month').addEventListener('change', (event) => { state.month = Number(event.target.value); renderAll(); });
+  document.querySelectorAll('[data-overview-period]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (state.overviewPeriod === button.dataset.overviewPeriod) return;
+      state.overviewPeriod = button.dataset.overviewPeriod;
+      overview();
+      const body = $('#overview-profits');
+      body.classList.remove('switching');
+      void body.offsetWidth;
+      body.classList.add('switching');
+    });
+  });
   Object.entries(panels).forEach(([key, panel]) => {
     const element = document.querySelector(`[data-rotating="${key}"]`);
     element.addEventListener('mouseenter', () => { panel.hovering = true; });
